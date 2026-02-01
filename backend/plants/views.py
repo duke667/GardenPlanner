@@ -85,10 +85,15 @@ class PlantingCycleViewSet(viewsets.ModelViewSet):
     def add_event(self, request, pk=None):
         """Event zu einem Zyklus hinzufügen"""
         cycle = self.get_object()
-        serializer = EventSerializer(data=request.data)
+
+        # Füge planting_cycle zu den Daten hinzu
+        data = request.data.copy()
+        data['planting_cycle'] = cycle.id
+
+        serializer = EventSerializer(data=data)
 
         if serializer.is_valid():
-            serializer.save(planting_cycle=cycle)
+            serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -96,10 +101,15 @@ class PlantingCycleViewSet(viewsets.ModelViewSet):
     def add_task(self, request, pk=None):
         """Task zu einem Zyklus hinzufügen"""
         cycle = self.get_object()
-        serializer = TaskSerializer(data=request.data)
+
+        # Füge planting_cycle zu den Daten hinzu
+        data = request.data.copy()
+        data['planting_cycle'] = cycle.id
+
+        serializer = TaskSerializer(data=data)
 
         if serializer.is_valid():
-            serializer.save(planting_cycle=cycle)
+            serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
