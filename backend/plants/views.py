@@ -197,8 +197,12 @@ class DashboardViewSet(viewsets.ViewSet):
 
         # Aufgaben
         open_tasks = Task.objects.filter(completed=False)
-        overdue_tasks = open_tasks.filter(due_date__lt=today)
+        overdue_tasks = open_tasks.filter(
+            due_date__isnull=False,
+            due_date__lt=today
+        )
         upcoming_tasks = open_tasks.filter(
+            due_date__isnull=False,
             due_date__gte=today,
             due_date__lte=today + timedelta(days=7)
         )
