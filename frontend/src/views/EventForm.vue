@@ -278,8 +278,14 @@ const addEvent = async () => {
       cycleId = cycleResponse.data.id
     }
 
+    // Bereite Event-Daten vor - entferne leere/null Felder
+    const eventPayload = { ...eventData.value }
+    if (!eventPayload.location) delete eventPayload.location
+    if (!eventPayload.quantity) delete eventPayload.quantity
+    if (!eventPayload.notes) delete eventPayload.notes
+
     // Füge Event zum Zyklus hinzu
-    const response = await cycleAPI.addEvent(cycleId, eventData.value)
+    const response = await cycleAPI.addEvent(cycleId, eventPayload)
     recentEvents.value.unshift(response.data)
 
     successMessage.value = needsNewCycle.value
@@ -292,10 +298,30 @@ const addEvent = async () => {
     resetForm()
   } catch (err) {
     console.error('Add event error:', err)
-    errorMessage.value = err.response?.data?.detail ||
-                         err.response?.data?.message ||
-                         'Fehler beim Speichern des Ereignisses'
-    setTimeout(() => errorMessage.value = '', 5000)
+    console.error('Response data:', err.response?.data)
+
+    // Formatiere die Fehlermeldung
+    let errorMsg = 'Fehler beim Speichern des Ereignisses'
+    if (err.response?.data) {
+      const data = err.response.data
+      if (typeof data === 'string') {
+        errorMsg = data
+      } else if (data.detail) {
+        errorMsg = data.detail
+      } else if (data.message) {
+        errorMsg = data.message
+      } else {
+        // Zeige alle Feldfehlermeldungen
+        const errors = Object.entries(data).map(([key, value]) => {
+          const msg = Array.isArray(value) ? value.join(', ') : value
+          return `${key}: ${msg}`
+        }).join('\n')
+        errorMsg = errors || errorMsg
+      }
+    }
+
+    errorMessage.value = errorMsg
+    setTimeout(() => errorMessage.value = '', 10000)
   } finally {
     saving.value = false
   }
