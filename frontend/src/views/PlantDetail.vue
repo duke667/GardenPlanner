@@ -347,14 +347,28 @@ const loadPlant = async () => {
 
 const createNewCycle = async () => {
   try {
+    loading.value = true
+    errorMessage.value = ''
+    successMessage.value = ''
+
     await cycleAPI.create({
       plant: plant.value.id,
       year: new Date().getFullYear(),
       status: 'planning'
     })
+
+    successMessage.value = 'Neuer Anbau-Zyklus erfolgreich angelegt'
+    setTimeout(() => successMessage.value = '', 3000)
+
     await loadPlant()
   } catch (err) {
     console.error('Create cycle error:', err)
+    errorMessage.value = err.response?.data?.detail ||
+                         err.response?.data?.message ||
+                         'Fehler beim Anlegen des Zyklus'
+    setTimeout(() => errorMessage.value = '', 5000)
+  } finally {
+    loading.value = false
   }
 }
 

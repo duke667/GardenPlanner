@@ -28,18 +28,21 @@
             <!-- Pflanze auswählen -->
             <div>
               <label class="label">Pflanze *</label>
-              <select v-model="selectedCycle" required class="input">
+              <select v-model="selectedPlant" required class="input" @change="onPlantChange">
                 <option value="">Pflanze wählen...</option>
                 <option
-                  v-for="cycle in activeCycles"
-                  :key="cycle.id"
-                  :value="cycle.id"
+                  v-for="plant in allPlants"
+                  :key="plant.id"
+                  :value="plant.id"
                 >
-                  {{ cycle.plant_name }}
-                  <template v-if="cycle.plant_variety">({{ cycle.plant_variety }})</template>
-                  - {{ cycle.year }}
+                  {{ plant.name }}
+                  <template v-if="plant.variety">({{ plant.variety }})</template>
+                  <template v-if="!plant.has_current_cycle"> - ⚠️ Kein Zyklus für {{ currentYear }}</template>
                 </option>
               </select>
+              <p v-if="selectedPlant && needsNewCycle" class="text-sm text-orange-600 mt-1">
+                ℹ️ Ein neuer Anbau-Zyklus wird automatisch erstellt
+              </p>
             </div>
 
             <!-- Event Type -->
@@ -143,14 +146,18 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { cycleAPI, eventAPI } from '../services/api'
+import { cycleAPI, plantAPI } from '../services/api'
 
-const activeCycles = ref([])
-const selectedCycle = ref('')
+const allPlants = ref([])
+const activeCycles = ref({})
+const selectedPlant = ref('')
+const selectedCycleId = ref(null)
+const needsNewCycle = ref(false)
 const saving = ref(false)
 const recentEvents = ref([])
 const successMessage = ref('')
 const errorMessage = ref('')
+const currentYear = new Date().getFullYear()
 
 const eventData = ref({
   event_type: 'watering',
@@ -201,18 +208,54 @@ const quantityPlaceholder = computed(() => {
   return ''
 })
 
-const loadActiveCycles = async () => {
+const loadPlants = async () => {
   try {
-    const currentYear = new Date().getFullYear()
-    const response = await cycleAPI.getAll({ year: currentYear })
-    activeCycles.value = response.data.results || response.data
+    // Lade alle Pflanzen
+    const plantsResponse = await plantAPI.getAll()
+    const plants = plantsResponse.data.results || plantsResponse.data
+
+    // Lade aktuelle Zyklen
+    const cyclesResponse = await cycleAPI.getAll({ year: currentYear })
+    const cycles = cyclesResponse.data.results || cyclesResponse.data
+
+    // Erstelle Mapping von plant_id zu cycle
+    const cycleMap = {}
+    cycles.forEach(cycle => {
+      cycleMap[cycle.plant] = cycle
+    })
+    activeCycles.value = cycleMap
+
+    // Markiere Pflanzen, die Zyklen haben
+    allPlants.value = plants.map(plant => ({
+      ...plant,
+      has_current_cycle: !!cycleMap[plant.id]
+    }))
   } catch (err) {
-    console.error('Load cycles error:', err)
+    console.error('Load plants error:', err)
+    errorMessage.value = 'Fehler beim Laden der Pflanzen'
+  }
+}
+
+const onPlantChange = () => {
+  const plantId = selectedPlant.value
+  if (!plantId) {
+    needsNewCycle.value = false
+    selectedCycleId.value = null
+    return
+  }
+
+  const cycle = activeCycles.value[plantId]
+  if (cycle) {
+    selectedCycleId.value = cycle.id
+    needsNewCycle.value = false
+  } else {
+    selectedCycleId.value = null
+    needsNewCycle.value = true
   }
 }
 
 const addEvent = async () => {
-  if (!selectedCycle.value) {
+  if (!selectedPlant.value) {
     errorMessage.value = 'Bitte wähle eine Pflanze aus'
     setTimeout(() => errorMessage.value = '', 5000)
     return
@@ -223,12 +266,29 @@ const addEvent = async () => {
     errorMessage.value = ''
     successMessage.value = ''
 
-    const response = await cycleAPI.addEvent(selectedCycle.value, eventData.value)
+    let cycleId = selectedCycleId.value
+
+    // Erstelle neuen Zyklus, wenn keiner existiert
+    if (!cycleId) {
+      const cycleResponse = await cycleAPI.create({
+        plant: selectedPlant.value,
+        year: currentYear,
+        status: 'planning'
+      })
+      cycleId = cycleResponse.data.id
+    }
+
+    // Füge Event zum Zyklus hinzu
+    const response = await cycleAPI.addEvent(cycleId, eventData.value)
     recentEvents.value.unshift(response.data)
 
-    successMessage.value = 'Ereignis erfolgreich gespeichert'
+    successMessage.value = needsNewCycle.value
+      ? 'Zyklus angelegt und Ereignis gespeichert'
+      : 'Ereignis erfolgreich gespeichert'
     setTimeout(() => successMessage.value = '', 3000)
 
+    // Lade Pflanzen neu, um aktualisierten Zyklus-Status zu zeigen
+    await loadPlants()
     resetForm()
   } catch (err) {
     console.error('Add event error:', err)
@@ -261,7 +321,7 @@ const formatDate = (dateString) => {
 }
 
 onMounted(() => {
-  loadActiveCycles()
+  loadPlants()
 })
 </script>
 
